@@ -97,18 +97,21 @@ STS.UI = (function () {
             });
             STS.Events.on('HEAL', function (data) {
                 ui.healAnimation(null, data.amount);
+                ui._updateMapHudStats();
             });
             STS.Events.on('ENEMY_DIED', function (data) {
                 ui.deathAnimation(data.index);
             });
             STS.Events.on('RELIC_OBTAINED', function (data) {
                 if (data.relic) ui.flashRelic(data.relic.id);
+                ui.renderRelicBar();
             });
             STS.Events.on('CARD_DRAWN', function () {
                 if (ui.currentScreen === SCREEN.COMBAT) ui.renderHand();
             });
             STS.Events.on('GOLD_CHANGED', function () {
                 ui.updateGoldDisplay();
+                ui._updateMapHudStats();
             });
             STS.Events.on('TURN_START', function () {
                 if (ui.currentScreen === SCREEN.COMBAT) ui.updateEnemyIntents();
@@ -233,7 +236,6 @@ STS.UI = (function () {
                     '<div class="relic-bar" id="relic-bar"></div>' +
                     '<div class="top-right-controls">' +
                         '<div class="gold-display" id="gold-display">💰 <span id="gold-value">0</span></div>' +
-                        '<button class="btn-icon btn-map" id="btn-open-map" title="Map">🗺️</button>' +
                         '<button class="btn-icon btn-deck" id="btn-open-deck" title="Deck">📋</button>' +
                         '<button class="btn-icon btn-settings-small" id="btn-settings-combat" title="Settings">⚙️</button>' +
                     '</div>' +
@@ -270,10 +272,6 @@ STS.UI = (function () {
                 '<canvas id="targeting-canvas" class="targeting-canvas"></canvas>';
 
             _on('btn-end-turn', 'click', function () { ui.onEndTurn(); });
-            _on('btn-open-map', 'click', function () {
-                _previousScreen = SCREEN.COMBAT;
-                STS.Game.changeScreen(SCREEN.MAP);
-            });
             _on('btn-open-deck', 'click', function () {
                 _previousScreen = SCREEN.COMBAT;
                 ui.showDeckView();
@@ -312,6 +310,22 @@ STS.UI = (function () {
                 3: "assets/backgrounds/title_bg.png"
             }[act] || "assets/backgrounds/map_bg.png";
 
+            var p = st.player;
+            var classLine = p.characterClass || 'the Ironclad';
+            var deckCount = (p.deck && p.deck.length) ? p.deck.length : 0;
+            var potionSlots = p.potions && p.potions.length ? p.potions.length : 3;
+            var potionHtml = '';
+            for (var si = 0; si < potionSlots; si++) {
+                var pot = p.potions[si];
+                if (pot) {
+                    potionHtml +=
+                        '<div class="map-hud-potion map-hud-potion-filled" data-map-potion-idx="' + si + '" style="--potion-c:' + (pot.color || '#88ccff') + '">' +
+                        '<span class="map-hud-potion-ic">🧪</span></div>';
+                } else {
+                    potionHtml += '<div class="map-hud-potion map-hud-potion-empty" title="Empty potion slot"></div>';
+                }
+            }
+
             var el = _ensureScreen('map-screen');
             el.style.setProperty('display', 'flex', 'important');
             el.style.setProperty('flex-direction', 'column', 'important');
@@ -322,20 +336,55 @@ STS.UI = (function () {
             el.style.setProperty('overflow', 'hidden', 'important');
 
             el.innerHTML =
-                '<div class="map-bg" style="background-image:linear-gradient(180deg,rgba(6,8,18,0.55) 0%,rgba(10,12,28,0.72) 100%),url(\'' + actBg + '\');background-size:cover;background-position:center;"></div>' +
-                '<div class="map-header">' +
-                    '<h2 class="map-title">Act ' + act + '</h2>' +
-                    '<div class="map-player-stats">' +
-                        '<span class="map-hp">❤️ ' + st.player.hp + '/' + st.player.maxHp + '</span>' +
-                        '<span class="map-gold">💰 ' + st.player.gold + '</span>' +
+                '<div class="map-bg" style="background-image:linear-gradient(180deg,rgba(12,10,8,0.88) 0%,rgba(18,16,14,0.72) 50%,rgba(8,8,10,0.9) 100%),url(\'' + actBg + '\');background-size:cover;background-position:center;"></div>' +
+                '<div class="map-chrome">' +
+                '<div class="map-hud">' +
+                    '<div class="map-hud-left">' +
+                        '<div class="map-hud-identity">' +
+                            '<span class="map-hud-name">' + _escHtml(p.name) + '</span> ' +
+                            '<span class="map-hud-class">' + _escHtml(classLine) + '</span>' +
+                        '</div>' +
+                        '<div class="map-hud-statrow">' +
+                            '<span class="map-hud-heart" aria-hidden="true">♥</span> ' +
+                            '<span class="map-hud-hp" id="map-hud-hp">' + p.hp + '/' + p.maxHp + '</span>' +
+                            '<span class="map-hud-goldrow"><span class="map-hud-gold-ic" aria-hidden="true">💰</span> ' +
+                            '<span class="map-hud-gold" id="map-hud-gold">' + p.gold + '</span></span>' +
+                        '</div>' +
+                        '<div class="map-hud-potions" id="map-hud-potions">' + potionHtml + '</div>' +
                     '</div>' +
-                    '<div class="map-controls">' +
-                        '<button class="btn-icon" id="btn-deck-map" title="View Deck">📋</button>' +
-                        '<button class="btn-icon" id="btn-settings-map" title="Settings">⚙️</button>' +
+                    '<div class="map-hud-center">' +
+                        '<span class="map-hud-asc" title="Act"><span class="map-hud-flame" aria-hidden="true">🔥</span> Act ' + act + '</span>' +
+                    '</div>' +
+                    '<div class="map-hud-right">' +
+                        '<button type="button" class="map-hud-deck-btn" id="btn-deck-map" title="Deck">🃏 ' +
+                        '<span class="map-hud-deckct" id="map-hud-deck">' + deckCount + '</span></button>' +
+                        '<button type="button" class="btn-icon map-hud-gear" id="btn-settings-map" title="Settings">⚙️</button>' +
                     '</div>' +
                 '</div>' +
-                '<div class="map-container" id="map-container">' +
-                    '<div class="map-scroll" id="map-scroll"></div>' +
+                '<div class="map-relic-row">' +
+                    '<span class="map-relic-label">Relics</span>' +
+                    '<div class="map-relic-bar" id="map-relic-bar"></div>' +
+                '</div>' +
+                '</div>' +
+                '<div class="map-body">' +
+                    '<div class="map-parchment-outer">' +
+                        '<div class="map-parchment" id="map-parchment">' +
+                            '<div class="map-container" id="map-container">' +
+                                '<div class="map-scroll" id="map-scroll"></div>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<aside class="map-legend" aria-label="Map legend">' +
+                        '<h3 class="map-legend-title">Legend</h3>' +
+                        '<ul class="map-legend-list">' +
+                            '<li><span class="map-leg-ic map-leg-q">?</span> Unknown / Event</li>' +
+                            '<li><span class="map-leg-ic map-leg-bag">🛍</span> Merchant</li>' +
+                            '<li><span class="map-leg-ic map-leg-chest">📦</span> Treasure</li>' +
+                            '<li><span class="map-leg-ic map-leg-fire">🔥</span> Rest</li>' +
+                            '<li><span class="map-leg-ic map-leg-mob">💀</span> Enemy</li>' +
+                            '<li><span class="map-leg-ic map-leg-elite">👹</span> Elite</li>' +
+                        '</ul>' +
+                    '</aside>' +
                 '</div>';
 
             _on('btn-deck-map', 'click', function () {
@@ -343,6 +392,23 @@ STS.UI = (function () {
                 ui.showDeckView();
             });
             _on('btn-settings-map', 'click', function () { ui.onSettings(); });
+
+            var potEls = el.querySelectorAll('.map-hud-potion-filled');
+            for (var pe = 0; pe < potEls.length; pe++) {
+                (function (idx, node) {
+                    var potion = p.potions[idx];
+                    if (!potion) return;
+                    node.addEventListener('mouseenter', function () {
+                        ui.showTooltip(node,
+                            '<strong>' + _escHtml(potion.name) + '</strong><br>' +
+                            '<span class="tooltip-desc">' + _escHtml(potion.description || '') + '</span> (use in combat)',
+                            'bottom');
+                    });
+                    node.addEventListener('mouseleave', function () { ui.hideTooltip(); });
+                })(parseInt(potEls[pe].getAttribute('data-map-potion-idx'), 10), potEls[pe]);
+            }
+
+            ui.renderRelicBar();
 
             requestAnimationFrame(function () {
                 requestAnimationFrame(function () {
@@ -486,10 +552,13 @@ STS.UI = (function () {
 
             var ev = st.eventData;
             var el = _ensureScreen('event-screen');
+            var artUrl = _getEventImageUrl(ev);
             var html =
                 '<div class="event-bg"></div>' +
                 '<div class="event-content">' +
-                    '<div class="event-image-area"><div class="event-image"></div></div>' +
+                    '<div class="event-image-area"><div class="event-image">' +
+                    '<img class="event-image-img" src="' + _escHtml(artUrl) + '" alt="' + _escHtml(ev.name) + '" />' +
+                    '</div></div>' +
                     '<h2 class="event-title">' + _escHtml(ev.name) + '</h2>' +
                     '<p class="event-description" id="event-desc"></p>' +
                     '<div class="event-choices" id="event-choices">';
@@ -503,6 +572,14 @@ STS.UI = (function () {
                 '</div>';
 
             el.innerHTML = html;
+
+            var evImg = el.querySelector('.event-image-img');
+            if (evImg) {
+                evImg.addEventListener('error', function onEvImgErr() {
+                    evImg.removeEventListener('error', onEvImgErr);
+                    evImg.src = _eventArtDataUrl(ev);
+                });
+            }
 
             _typewriterEffect('event-desc', ev.description);
 
@@ -910,14 +987,14 @@ STS.UI = (function () {
             var st = _state();
             if (!st) return;
 
-            var bar = document.getElementById('relic-bar');
-            if (!bar) return;
-            bar.innerHTML = '';
-
-            var relics = st.player.relics;
-            for (var i = 0; i < relics.length; i++) {
-                var el = ui.createRelicElement(relics[i]);
-                bar.appendChild(el);
+            var bars = [document.getElementById('relic-bar'), document.getElementById('map-relic-bar')];
+            for (var b = 0; b < bars.length; b++) {
+                var bar = bars[b];
+                if (!bar) continue;
+                bar.innerHTML = '';
+                for (var i = 0; i < st.player.relics.length; i++) {
+                    bar.appendChild(ui.createRelicElement(st.player.relics[i]));
+                }
             }
         },
 
@@ -1854,6 +1931,17 @@ STS.UI = (function () {
             }
         },
 
+        _updateMapHudStats: function () {
+            var st = _state();
+            if (!st || ui.currentScreen !== SCREEN.MAP) return;
+            var h = document.getElementById('map-hud-hp');
+            if (h) h.textContent = st.player.hp + '/' + st.player.maxHp;
+            var g = document.getElementById('map-hud-gold');
+            if (g) g.textContent = st.player.gold;
+            var d = document.getElementById('map-hud-deck');
+            if (d && st.player.deck) d.textContent = st.player.deck.length;
+        },
+
         updateEnergyDisplay: function () {
             ui.renderEnergyOrb();
         },
@@ -2235,6 +2323,59 @@ STS.UI = (function () {
         return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
     }
 
+    /**
+     * Placeholder for event art when the remote image fails to load.
+     */
+    function _eventArtDataUrl(ev) {
+        var id = (ev && ev.id) ? String(ev.id) : 'EVENT';
+        var h = 0;
+        for (var i = 0; i < id.length; i++) {
+            h = ((h << 5) - h) + id.charCodeAt(i);
+            h |= 0;
+        }
+        var hue = Math.abs(h) % 360;
+        var hue2 = (hue + 40) % 360;
+        var letter = (ev && ev.name) ? String(ev.name).charAt(0).toUpperCase() : '?';
+        if (letter === '<' || letter === '&' || letter === '>') letter = '?';
+        var svg =
+            '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">' +
+            '<defs>' +
+            '<linearGradient id="evbg" x1="0" y1="0" x2="1" y2="1">' +
+            '<stop offset="0" stop-color="hsl(' + hue + ',45%,22%)"/>' +
+            '<stop offset="1" stop-color="hsl(' + hue2 + ',40%,10%)"/>' +
+            '</linearGradient>' +
+            '<radialGradient id="glow" cx="50%" cy="40%" r="60%">' +
+            '<stop offset="0" stop-color="rgba(255,215,0,0.25)"/>' +
+            '<stop offset="1" stop-color="rgba(0,0,0,0)"/>' +
+            '</radialGradient>' +
+            '</defs>' +
+            '<rect width="400" height="300" fill="url(#evbg)"/>' +
+            '<rect width="400" height="300" fill="url(#glow)"/>' +
+            '<rect x="4" y="4" width="392" height="292" fill="none" stroke="rgba(255,215,0,0.4)" stroke-width="3" rx="12"/>' +
+            '<text x="200" y="175" text-anchor="middle" fill="rgba(255,255,255,0.12)" font-size="120" font-weight="900" font-family="Georgia,serif">' +
+            letter +
+            '</text></svg>';
+        return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    }
+
+    function _getEventImageUrl(ev) {
+        var st = _state();
+        var runSeed = (st && st.run && st.run.seed != null) ? String(st.run.seed) : '0';
+        var base = (ev && ev.imagePrompt) ? String(ev.imagePrompt) : (
+            (ev && ev.name ? ev.name : 'Mystery') + ', ' + (ev && ev.description ? ev.description : '') +
+            ', dark fantasy roguelike game event, single scene illustration, dramatic lighting, no text, no watermark'
+        );
+        var s = (ev && ev.id ? String(ev.id) : 'ev') + runSeed;
+        var seed = 0;
+        for (var j = 0; j < s.length; j++) {
+            seed = ((seed << 5) - seed) + s.charCodeAt(j);
+            seed |= 0;
+        }
+        seed = Math.abs(seed) % 1000000;
+        return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(base) +
+            '?width=640&height=400&nologo=true&seed=' + seed;
+    }
+
     function _escHtml(str) {
         if (!str) return '';
         return String(str)
@@ -2355,14 +2496,6 @@ STS.UI = (function () {
                 case 'D':
                     if (ui.currentScreen === SCREEN.COMBAT || ui.currentScreen === SCREEN.MAP) {
                         ui.showDeckView();
-                    }
-                    break;
-
-                case 'm':
-                case 'M':
-                    if (ui.currentScreen === SCREEN.COMBAT) {
-                        _previousScreen = SCREEN.COMBAT;
-                        STS.Game.changeScreen(SCREEN.MAP);
                     }
                     break;
             }
@@ -2577,25 +2710,30 @@ STS.UI = (function () {
 
         var floorKeys = Object.keys(floors).map(Number).sort(function (a, b) { return a - b; });
 
-        /* PNG art for each node type (transparent portraits sit on the act backdrop) */
-        var NODE_ART = {
-            MONSTER: 'assets/enemies/jaw_worm.png',
-            ELITE: 'assets/enemies/cultist.png',
-            BOSS: 'assets/enemies/hexaghost.png',
-            REST: 'assets/hero.png',
-            SHOP: 'assets/enemies/gremlin.png',
-            EVENT: 'assets/enemies/red_louse.png',
-            TREASURE: 'assets/enemies/guardian.png'
+        /* Slay the Spire–style map symbols (dark disc + icon) */
+        var NODE_EMOJI = {
+            MONSTER:  '💀',
+            ELITE:    '👹',
+            BOSS:     '☠\uFE0F',
+            REST:     '🔥',
+            SHOP:     '💰',
+            EVENT:    '❓',
+            TREASURE: '📦'
         };
 
         var mapWrap = document.getElementById('map-container');
-        var containerWidth = (mapWrap && mapWrap.clientWidth) ? mapWrap.clientWidth : 0;
-        if (containerWidth < 360) {
-            containerWidth = Math.min(Math.max(window.innerWidth - 48, 360), 1100);
+        var containerWidth = 0;
+        if (mapWrap) {
+            var br = mapWrap.getBoundingClientRect();
+            containerWidth = Math.floor(br.width);
+        }
+        if (containerWidth < 400) {
+            containerWidth = Math.max(400, Math.min(window.innerWidth - 32, 1400));
         }
         container.style.width = '100%';
-        container.style.maxWidth = '1000px';
+        container.style.maxWidth = '100%';
         container.style.margin = '0 auto';
+        container.style.minWidth = '';
 
         var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('class', 'map-paths');
@@ -2607,9 +2745,10 @@ STS.UI = (function () {
         container.appendChild(svg);
 
         var nodePositions = {};
-        var rowHeight = 104;
-        var nodeGap = Math.max(28, Math.min(72, Math.floor(containerWidth / 8)));
-        var totalHeight = floorKeys.length * rowHeight + 80;
+        var nodeJitter = {};
+        var rowHeight = 110;
+        var nodeGap = Math.max(24, Math.min(68, Math.floor(containerWidth / 8)));
+        var totalHeight = floorKeys.length * rowHeight + 100;
         container.style.minHeight = totalHeight + 'px';
         container.style.height = totalHeight + 'px';
         svg.setAttribute('height', totalHeight);
@@ -2618,7 +2757,7 @@ STS.UI = (function () {
         for (var fi = floorKeys.length - 1; fi >= 0; fi--) {
             var floor = floorKeys[fi];
             var floorNodes = floors[floor];
-            var y = (floorKeys.length - 1 - fi) * rowHeight + 48;
+            var y = (floorKeys.length - 1 - fi) * rowHeight + 52;
 
             var rowEl = document.createElement('div');
             rowEl.className = 'map-row';
@@ -2647,11 +2786,22 @@ STS.UI = (function () {
                 else nodeEl.classList.add('map-node-locked');
 
                 if (st.map.currentNodeId === node.id) nodeEl.classList.add('map-node-current');
+                if (node.type === 'BOSS') nodeEl.classList.add('map-node-boss');
 
-                var art = NODE_ART[node.type] || NODE_ART.MONSTER;
-                nodeEl.innerHTML =
-                    '<img class="map-node-img" src="' + art + '" alt="' + node.type + '" draggable="false">';
-                nodeEl.title = node.type + ' (Floor ' + node.floor + ')';
+                var sym = NODE_EMOJI[node.type] || NODE_EMOJI.MONSTER;
+                var sid = String(node.id);
+                var hsh = 0;
+                for (var cc = 0; cc < sid.length; cc++) hsh += sid.charCodeAt(cc);
+                var jx = (hsh + ni * 7) % 21 - 10;
+                var jy = (hsh * 3 + floor * 5) % 19 - 9;
+                nodeJitter[node.id] = { x: jx, y: jy };
+                nodeEl.style.position = 'relative';
+                nodeEl.style.left = jx + 'px';
+                nodeEl.style.top = jy + 'px';
+
+                nodeEl.innerHTML = '<div class="map-node-disc" aria-hidden="true">' +
+                    '<span class="map-node-emoji">' + sym + '</span></div>';
+                nodeEl.title = (node.type || 'NODE') + ' (Floor ' + node.floor + ')';
 
                 (function (n) {
                     nodeEl.addEventListener('click', function () {
@@ -2666,14 +2816,15 @@ STS.UI = (function () {
 
             container.appendChild(rowEl);
 
-            var nodeImgSize = 88;
+            var nodeImgSize = 80;
             var rowW = floorNodes.length * nodeImgSize + Math.max(0, floorNodes.length - 1) * nodeGap;
             var rowStart = (containerWidth - rowW) / 2;
             for (var ri = 0; ri < floorNodes.length; ri++) {
                 var nid = floorNodes[ri].id;
+                var j = nodeJitter[nid] || { x: 0, y: 0 };
                 nodePositions[nid] = {
-                    x: rowStart + ri * (nodeImgSize + nodeGap) + nodeImgSize / 2,
-                    y: y + 44
+                    x: rowStart + ri * (nodeImgSize + nodeGap) + nodeImgSize / 2 + j.x,
+                    y: y + 46 + j.y
                 };
             }
         }
@@ -2689,9 +2840,11 @@ STS.UI = (function () {
             line.setAttribute('y1', fromPos.y);
             line.setAttribute('x2', toPos.x);
             line.setAttribute('y2', toPos.y);
-            line.setAttribute('stroke', '#554433');
-            line.setAttribute('stroke-width', '2');
-            line.setAttribute('opacity', '0.6');
+            line.setAttribute('stroke', '#4a4036');
+            line.setAttribute('stroke-width', '2.5');
+            line.setAttribute('stroke-dasharray', '4 6');
+            line.setAttribute('stroke-linecap', 'round');
+            line.setAttribute('opacity', '0.75');
 
             var fromNode = null, toNode = null;
             for (var ni = 0; ni < nodes.length; ni++) {
@@ -2845,6 +2998,7 @@ STS.UI = (function () {
         '.screen { position: absolute; inset: 0; display: none; opacity: 0; transition: opacity 0.35s ease; }',
         '.screen-active { display: flex !important; opacity: 1 !important; flex-direction: column; align-items: center; justify-content: center; }',
         '#combat-screen.screen-active { align-items: stretch !important; justify-content: flex-start !important; }',
+        '#map-screen.screen-active { align-items: stretch !important; justify-content: flex-start !important; width: 100% !important; min-height: 100% !important; }',
 
         /* -- Title Screen ------------------------------------------------ */
         '.title-bg { position: absolute; inset: 0; background: linear-gradient(180deg, #1a0a2e 0%, #0d0d24 50%, #0a0a14 100%); pointer-events: none; }',
@@ -3074,27 +3228,76 @@ STS.UI = (function () {
         '.game-tooltip { position: fixed; z-index: 10000; background: rgba(15,15,30,0.95); border: 1px solid #555; border-radius: 6px; padding: 10px 14px; max-width: 280px; font-size: 0.85rem; line-height: 1.4; color: #e0d8c8; pointer-events: none; box-shadow: 0 4px 16px rgba(0,0,0,0.6); display: none; }',
         '.tooltip-desc { color: #aaa; font-size: 0.8rem; }',
 
-        /* -- Map Screen -------------------------------------------------- */
+        /* -- Map Screen (parchment + STS-style HUD) ------------------------ */
         '#map-screen { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 100vh; position: relative; overflow: hidden; }',
-        '.map-bg { position: absolute; inset: 0; z-index: 0; background-color: #0a0a14; background-repeat: no-repeat; }',
-        '.map-header { position: relative; z-index: 6; flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; background: linear-gradient(180deg, rgba(0,0,0,0.55) 0%, rgba(0,0,0,0.15) 100%); }',
-        '.map-title { color: #ffd700; font-size: 1.5rem; text-shadow: 0 2px 8px rgba(0,0,0,0.8); }',
-        '.map-player-stats { display: flex; gap: 16px; font-weight: 700; }',
-        '.map-hp { color: #ff6666; }',
-        '.map-gold { color: #ffd700; }',
-        '.map-controls { display: flex; gap: 8px; }',
-        '.map-container { position: relative; z-index: 2; flex: 1 1 auto; min-height: 0; width: 100%; overflow-y: auto; overflow-x: hidden; padding: 16px 12px 32px; box-sizing: border-box; }',
-        '.map-scroll { position: relative; width: 100%; max-width: 1000px; margin: 0 auto; min-height: 400px; box-sizing: border-box; }',
+        '.map-bg { position: absolute; inset: 0; z-index: 0; background-color: #141210; background-repeat: no-repeat; filter: saturate(0.85) contrast(1.05); }',
+        '.map-chrome { position: relative; z-index: 7; width: 100%; flex: 0 0 auto; align-self: stretch; box-sizing: border-box; }',
+        '.map-hud { position: relative; z-index: 1; width: 100%; box-sizing: border-box; display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding: 10px 20px 10px; background: linear-gradient(180deg, #2a2824 0%, #1a1814 50%, #12100e 100%); border-bottom: 1px solid rgba(80,70,50,0.5); box-shadow: 0 4px 20px rgba(0,0,0,0.5); }',
+        '.map-hud-left { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; min-width: 0; flex: 1 1 200px; }',
+        '.map-hud-identity { line-height: 1.2; }',
+        '.map-hud-name { font-size: 1.15rem; font-weight: 800; color: #f0ebe4; text-shadow: 0 1px 3px #000; }',
+        '.map-hud-class { font-size: 0.8rem; color: #8a8578; font-weight: 500; }',
+        '.map-hud-statrow { display: flex; align-items: center; gap: 10px; font-size: 0.95rem; font-weight: 700; }',
+        '.map-hud-heart { color: #c62828; font-size: 1.1rem; }',
+        '.map-hud-hp { color: #e84a4a; min-width: 3.2em; }',
+        '.map-hud-goldrow { color: #ffd44d; }',
+        '.map-hud-gold-ic { filter: none; }',
+        '.map-hud-potions { display: flex; gap: 6px; margin-top: 2px; }',
+        '.map-hud-potion { width: 32px; height: 32px; border-radius: 6px; display: flex; align-items: center; justify-content: center; }',
+        '.map-hud-potion-empty { border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.25); opacity: 0.5; }',
+        '.map-hud-potion-filled { border: 1px solid rgba(255,255,255,0.25); background: rgba(30,40,50,0.5); cursor: default; }',
+        '.map-hud-potion-ic { font-size: 1.1rem; }',
+        '.map-hud-center { display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }',
+        '.map-hud-asc { font-size: 0.95rem; font-weight: 700; color: #c85a2e; text-shadow: 0 0 8px rgba(200,80,30,0.4); }',
+        '.map-hud-flame { margin-right: 4px; }',
+        '.map-hud-right { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; margin-left: auto; }',
+        '.map-hud-deck-btn { display: flex; align-items: center; gap: 6px; padding: 6px 12px; font-size: 0.9rem; font-weight: 700; color: #d8d4c8; background: rgba(0,0,0,0.35); border: 1px solid #555; border-radius: 6px; cursor: pointer; }',
+        '.map-hud-deck-btn:hover { background: rgba(80,60,20,0.4); border-color: #8a7; }',
+        '.map-hud-deckct { min-width: 1.2em; color: #f44; }',
+        '.map-hud-gear { }',
+        '.map-relic-row { position: relative; z-index: 1; width: 100%; box-sizing: border-box; display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 6px 20px 8px; background: rgba(0,0,0,0.45); border-top: 1px solid rgba(60,50,40,0.5); border-bottom: 1px solid rgba(40,30,20,0.6); }',
+        '.map-relic-label { font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.15em; color: #7a6e5a; font-weight: 800; }',
+        '.map-relic-bar { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 40px; flex: 1; }',
+        '.map-relic-bar .relic-icon { width: 40px; height: 40px; min-width: 40px; border-radius: 6px; }',
+        '.map-relic-bar .relic-emoji { font-size: 1.3rem; }',
+        '.map-body { position: relative; z-index: 2; display: flex; flex-direction: row; flex: 1 1 0; min-height: 0; width: 100%; align-items: stretch; align-self: stretch; background: linear-gradient(180deg, #0c0a08 0%, #141210 100%); }',
+        '.map-parchment-outer { flex: 1 1 0%; min-width: 0; padding: 10px 8px 20px 12px; display: flex; box-sizing: border-box; }',
+        '.map-parchment { flex: 1 1 auto; min-height: 0; min-width: 0; width: 100%; display: flex; flex-direction: column; position: relative; border-radius: 8px; border: 2px solid #2a1e12; ' +
+        'box-shadow: inset 0 0 60px rgba(0,0,0,0.2), 0 10px 40px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.1); ' +
+        'background: linear-gradient(165deg, #d4b896 0%, #b89a6e 20%, #9a7a4a 50%, #7a5a30 100%); }',
+        '.map-parchment::after { content: ""; position: absolute; inset: 0; border-radius: 6px; pointer-events: none; ' +
+        'box-shadow: inset 0 0 80px rgba(60,40,20,0.25), inset 0 2px 0 rgba(255,255,255,0.15); }',
+        '.map-legend { flex: 0 0 200px; width: 200px; max-width: min(200px, 32vw); box-sizing: border-box; margin: 10px 12px 20px 0; padding: 10px 12px; ' +
+        'align-self: stretch; ' +
+        'background: linear-gradient(180deg, #5a6a7a 0%, #3a4a5a 100%); border: 1px solid #2a3a4a; border-radius: 6px; ' +
+        'box-shadow: 0 4px 16px rgba(0,0,0,0.4); }',
+        '.map-legend-title { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.12em; color: #c8d0d8; margin: 0 0 8px; border-bottom: 1px solid rgba(255,255,255,0.15); padding-bottom: 6px; }',
+        '.map-legend-list { list-style: none; font-size: 0.7rem; line-height: 1.65; color: #b8c0c8; margin: 0; padding: 0; }',
+        '.map-legend-list li { display: flex; align-items: center; gap: 8px; }',
+        '.map-leg-ic { display: inline-flex; width: 1.2em; justify-content: center; }',
+        '.map-container { position: relative; z-index: 2; width: 100%; min-width: 0; min-height: 0; flex: 1 1 auto; height: 100%; overflow-y: auto; overflow-x: auto; padding: 20px 12px 36px; box-sizing: border-box; -webkit-overflow-scrolling: touch; }',
+        '.map-scroll { position: relative; width: 100%; max-width: 100%; margin: 0 auto; min-height: 400px; box-sizing: border-box; }',
         '.map-paths { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 1; }',
         '.map-row { position: absolute; left: 0; right: 0; width: 100%; display: flex; flex-direction: row; flex-wrap: nowrap; justify-content: center; align-items: center; box-sizing: border-box; }',
-        '.map-node { flex: 0 0 auto; width: 88px; height: 88px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, opacity 0.2s ease; border: 3px solid transparent; background: transparent; box-sizing: border-box; }',
-        '.map-node:hover { transform: scale(1.06); }',
-        '.map-node-img { width: 76px; height: 76px; object-fit: contain; object-position: center bottom; pointer-events: none; display: block; filter: drop-shadow(0 4px 8px rgba(0,0,0,0.75)); }',
-        '.map-node-available { border-color: rgba(255,215,0,0.95); box-shadow: 0 0 14px rgba(255,215,0,0.45); animation: nodeAvailable 1.5s ease-in-out infinite; cursor: pointer; }',
-        '@keyframes nodeAvailable { 0%,100%{ box-shadow: 0 0 8px rgba(255,215,0,0.35); } 50%{ box-shadow: 0 0 22px rgba(255,215,0,0.65); } }',
-        '.map-node-visited { border-color: rgba(120,120,140,0.5); filter: grayscale(0.85) brightness(0.75); opacity: 0.75; cursor: default; }',
-        '.map-node-locked { border-color: rgba(60,60,80,0.4); filter: grayscale(1) brightness(0.55); opacity: 0.55; cursor: default; }',
-        '.map-node-current { border-color: #6f3 !important; box-shadow: 0 0 18px rgba(120,255,80,0.55); opacity: 1 !important; filter: none !important; }',
+        '.map-node { flex: 0 0 auto; width: 80px; height: 80px; display: flex; align-items: center; justify-content: center; cursor: default; ' +
+        'transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, opacity 0.2s ease; border: none; background: transparent; box-sizing: border-box; }',
+        '.map-node-disc { width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; ' +
+        'background: radial-gradient(circle at 30% 25%, #2a2a2e 0%, #0e0e12 100%); ' +
+        'box-shadow: inset 0 2px 4px rgba(255,255,255,0.1), 0 4px 8px rgba(0,0,0,0.5); border: 2px solid #0a0a0c; }',
+        '.map-node-emoji { font-size: 1.4rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.8)); }',
+        '.map-node-boss .map-node-disc { width: 68px; height: 68px; background: radial-gradient(circle at 30% 25%, #1a0a0a 0%, #0a0a0c 100%); ' +
+        'box-shadow: 0 0 0 2px rgba(200,100,100,0.4), 0 0 24px rgba(255,200,200,0.2), inset 0 2px 4px rgba(255,255,255,0.1); }',
+        '.map-node-boss .map-node-emoji { font-size: 1.6rem; }',
+        '.map-node-available:hover .map-node-disc { transform: scale(1.06); }',
+        '.map-node-available { cursor: pointer; }',
+        '.map-node-available .map-node-disc { box-shadow: 0 0 0 2px rgba(255,215,0,0.85), 0 0 16px rgba(255,220,0,0.4), inset 0 2px 4px rgba(255,255,255,0.1); animation: mapNodeGold 1.5s ease-in-out infinite; }',
+        '@keyframes mapNodeGold { 0%,100%{ box-shadow: 0 0 0 2px rgba(255,215,0,0.6), 0 0 10px rgba(255,200,0,0.3), inset 0 2px 4px rgba(255,255,255,0.1); } 50%{ box-shadow: 0 0 0 3px rgba(255,230,0,0.95), 0 0 20px rgba(255,220,0,0.5), inset 0 2px 4px rgba(255,255,255,0.12); } }',
+        '.map-node-visited { opacity: 0.72; }',
+        '.map-node-visited .map-node-disc { filter: grayscale(0.5) brightness(0.7); }',
+        '.map-node-locked { opacity: 0.5; }',
+        '.map-node-locked .map-node-disc { filter: grayscale(1) brightness(0.5); }',
+        '.map-node-current .map-node-disc { box-shadow: 0 0 0 3px rgba(80,220,100,0.9), 0 0 18px rgba(100,255,120,0.45) !important; }',
+        '.map-node-img { width: 76px; height: 76px; object-fit: contain; }',
 
         /* -- Shop Screen ------------------------------------------------- */
         '.shop-bg { position: absolute; inset: 0; background: linear-gradient(180deg, #1a0a00 0%, #0f0800 100%); }',
@@ -3120,8 +3323,9 @@ STS.UI = (function () {
         /* -- Event Screen ------------------------------------------------ */
         '.event-bg { position: absolute; inset: 0; background: linear-gradient(180deg, #0d0d1a 0%, #1a1a2e 100%); }',
         '.event-content { position: relative; z-index: 2; max-width: 600px; margin: 0 auto; padding: 60px 30px; text-align: center; }',
-        '.event-image-area { margin-bottom: 20px; }',
-        '.event-image { width: 120px; height: 120px; margin: 0 auto; background: rgba(255,255,255,0.05); border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 3rem; }',
+        '#event-screen .event-image-area { margin-bottom: 20px; }',
+        '#event-screen .event-image { width: min(92vw, 400px); max-width: 400px; height: auto; min-height: 200px; margin: 0 auto; aspect-ratio: 4/3; background: rgba(0,0,0,0.35); border: 2px solid rgba(255,215,0,0.45); border-radius: 12px; display: flex; align-items: center; justify-content: center; overflow: hidden; }',
+        '#event-screen .event-image-img { width: 100%; height: 100%; min-height: 200px; object-fit: cover; object-position: center; display: block; }',
         '.event-title { color: #ffd700; font-size: 1.8rem; margin-bottom: 16px; }',
         '.event-description { color: #ccc; font-size: 1rem; line-height: 1.6; margin-bottom: 30px; min-height: 2em; }',
         '.event-choices { display: flex; flex-direction: column; gap: 12px; }',

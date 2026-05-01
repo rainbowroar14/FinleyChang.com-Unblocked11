@@ -674,6 +674,7 @@ STS.Game = {
             screen: SCREEN.MAP,
             player: {
                 name: 'Ironclad',
+                characterClass: 'the Ironclad',
                 hp: STARTING_HP,
                 maxHp: STARTING_HP,
                 energy: STARTING_ENERGY,
@@ -748,8 +749,13 @@ STS.Game = {
      * @param {string} screen - One of the SCREEN enum values.
      */
     changeScreen: function (screen) {
-        var prev = STS.Game.state ? STS.Game.state.screen : null;
-        if (STS.Game.state) STS.Game.state.screen = screen;
+        var st = STS.Game.state;
+        if (screen === SCREEN.MAP && st && st.screen === SCREEN.COMBAT) {
+            STS.Game.log('You cannot open the map during combat.', 'combat');
+            return;
+        }
+        var prev = st ? st.screen : null;
+        if (st) st.screen = screen;
         STS.Events.emit('SCREEN_CHANGED', { from: prev, to: screen });
     },
 
@@ -1968,6 +1974,7 @@ STS.Game = {
                 id: 'BIG_FISH',
                 name: 'Big Fish',
                 description: 'A giant fish blocks your path.',
+                imagePrompt: 'A colossal ancient fish blocking a narrow stone path in a dark Spire, bioluminescent eyes, wet scales, misty cavern, fantasy roguelike game illustration, dramatic lighting, detailed digital painting',
                 choices: [
                     { text: 'Eat the fish. (Heal 5 HP)', effect: function () { STS.Game.healPlayer(5); } },
                     { text: 'Feed the fish. (Lose 5 Gold, gain Max HP)', effect: function () { STS.Game.removeGold(5); st.player.maxHp += 5; st.player.hp += 5; } },
@@ -1978,6 +1985,7 @@ STS.Game = {
                 id: 'GOLDEN_IDOL',
                 name: 'Golden Idol',
                 description: 'You see a golden idol on a pedestal.',
+                imagePrompt: 'A cursed golden idol on a weathered stone pedestal in a dim temple, warm glow, dust motes, temptation and danger, dark fantasy roguelike art, cinematic, highly detailed',
                 choices: [
                     { text: 'Take the idol. (Gain 200 Gold, lose 25% HP)', effect: function () { STS.Game.addGold(200); var dmg = Math.floor(st.player.maxHp * 0.25); st.player.hp = Math.max(1, st.player.hp - dmg); } },
                     { text: 'Leave it alone.', effect: function () { } }
@@ -1987,6 +1995,7 @@ STS.Game = {
                 id: 'SCRAP_OOZE',
                 name: 'Scrap Ooze',
                 description: 'A pile of scrap metal coated in slime.',
+                imagePrompt: 'A heap of rusted scrap metal and gears coated in viscous green slime, industrial dungeon, subtle steam, dark fantasy roguelike scene, moody lighting, detailed illustration',
                 choices: [
                     { text: 'Dig through it. (Lose 3 HP, 50% chance of relic)', effect: function () {
                         st.player.hp = Math.max(1, st.player.hp - 3);
@@ -2002,6 +2011,7 @@ STS.Game = {
                 id: 'LIVING_WALL',
                 name: 'Living Wall',
                 description: 'A wall of flesh blocks your way. It offers a deal.',
+                imagePrompt: 'A grotesque living wall of flesh and sinew in a Spire corridor, pulsing veins, half-open eye-like shapes, eerie offer, body horror light touch, dark fantasy roguelike, dramatic shadows',
                 choices: [
                     { text: 'Forget. (Remove a card)', effect: function () {
                         if (st.player.deck.length > 0) {
@@ -2026,6 +2036,7 @@ STS.Game = {
                 id: 'BONFIRE_SPIRITS',
                 name: 'Bonfire Spirits',
                 description: 'Spirits dance around a bonfire and beckon you.',
+                imagePrompt: 'Ethereal blue and white spirits dancing around a crackling bonfire in a dark stone chamber, embers, mysterious beckoning, dark fantasy roguelike rest event, warm and cold contrast, painterly detail',
                 choices: [
                     { text: 'Offer a card. (Remove a card, heal to full)', effect: function () {
                         if (st.player.deck.length > 0) {

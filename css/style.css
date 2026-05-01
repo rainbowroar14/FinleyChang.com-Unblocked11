@@ -977,6 +977,13 @@ button {
    -------------------------------------------------------------------------- */
 #map-screen {
     background: url('../assets/backgrounds/map_bg.png') center/cover no-repeat;
+    /* Match ui.js: full-width column layout (avoid centered shrink-wrap) */
+    align-items: stretch !important;
+    justify-content: flex-start !important;
+}
+#map-screen.screen-active {
+    align-items: stretch !important;
+    justify-content: flex-start !important;
 }
 #map-screen::before {
     content: '';
